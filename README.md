@@ -3,7 +3,6 @@
 E-commerce storefront for [Augusta Newham](https://augustanewham.com), a UK-based lingerie and shapewear brand. Built with Next.js (App Router) and powered by the Shopify Storefront API for products, cart, checkout and customer accounts.
 
 Developed and maintained by Lumo Group.
-
 ---
 
 ## Features
