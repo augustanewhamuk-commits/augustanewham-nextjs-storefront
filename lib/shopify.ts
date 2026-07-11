@@ -116,8 +116,10 @@ export type ShopifyProduct = {
   title: string;
   description: string;
   descriptionHtml: string;
-  /** Shopify product type — drives the storefront category. */
+  /** Shopify product type — category fallback when the product has no collection. */
   productType: string;
+  /** Collections this product belongs to — the first real one drives the breadcrumb category. */
+  collections: { handle: string; title: string }[];
   /** Product-level options, e.g. [{name:"Colour",optionValues:[…]},{name:"Size",…}]. */
   options: ShopifyOption[];
   priceRange: { minVariantPrice: Money; maxVariantPrice: Money };
@@ -152,6 +154,7 @@ const PRODUCT_FRAGMENT = /* GraphQL */ `
     description
     descriptionHtml
     productType
+    collections(first: 3) { edges { node { handle title } } }
     options {
       name
       optionValues { name swatch { color } }
@@ -177,9 +180,10 @@ const PRODUCT_FRAGMENT = /* GraphQL */ `
   }
 `;
 
-type RawProduct = Omit<ShopifyProduct, "images" | "variants" | "metafields"> & {
+type RawProduct = Omit<ShopifyProduct, "images" | "variants" | "metafields" | "collections"> & {
   images: { edges: { node: ShopifyImage }[] };
   variants: { edges: { node: ShopifyVariant }[] };
+  collections: { edges: { node: { handle: string; title: string } }[] };
   /** Only present when fetched withToken — disabled while tokenless. */
   metafields?: ({ key: string; value: string } | null)[];
 };
@@ -193,6 +197,7 @@ function normalizeProduct(p: RawProduct): ShopifyProduct {
     ...p,
     images: p.images.edges.map((e) => e.node),
     variants: p.variants.edges.map((e) => e.node),
+    collections: p.collections.edges.map((e) => e.node),
     metafields,
   };
 }

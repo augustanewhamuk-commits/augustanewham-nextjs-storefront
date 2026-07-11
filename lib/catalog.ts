@@ -138,12 +138,17 @@ export function toProduct(p: ShopifyProduct): Product {
     variants = [{ color: "", hex: DEFAULT_HEX, images: imagesFor(p.variants), sizes }];
   }
 
-  const category = p.productType || "Shop";
+  // Breadcrumb category: the product's first real collection (Shopify's auto
+  // "frontpage" excluded), falling back to the admin product type.
+  const collection = p.collections.find((c) => !HIDDEN_COLLECTION_HANDLES.has(c.handle));
+  const category = collection?.title || p.productType || "Shop";
   return {
     slug: p.handle,
     name: p.title,
     category,
-    categoryPath: `/${slugify(category) || "shop"}`,
+    categoryPath: collection
+      ? `/collections/${collection.handle}`
+      : `/${slugify(category) || "shop"}`,
     price: Number(p.priceRange.minVariantPrice.amount),
     // Already localised by Shopify's @inContext(country:) — see lib/country.ts.
     currencyCode: p.priceRange.minVariantPrice.currencyCode,
