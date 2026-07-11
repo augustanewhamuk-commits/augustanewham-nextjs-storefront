@@ -111,6 +111,16 @@ export function CartDrawer() {
     }
   };
 
+  // Coming back from checkout via the back/forward cache restores this
+  // component with `checkingOut` still true — re-arm the button.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setCheckingOut(false);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
   // Close when the route changes (e.g. tapping "View full cart").
   if (lastPath !== pathname) {
     setLastPath(pathname);

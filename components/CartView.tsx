@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
@@ -58,6 +58,16 @@ export function CartView() {
       setCheckingOut(false);
     }
   };
+
+  // Coming back from checkout via the back/forward cache restores this
+  // component with `checkingOut` still true — re-arm the button.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setCheckingOut(false);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   const lines = cart?.lines ?? [];
 

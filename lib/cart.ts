@@ -115,10 +115,33 @@ function rederive() {
 
 export function subscribeCart(callback: () => void) {
   listeners.add(callback);
+  installResync();
   void hydrate();
   return () => {
     listeners.delete(callback);
   };
+}
+
+/**
+ * Coming back from Shopify's hosted checkout (Back button, or the order
+ * confirmation's "continue shopping" link) usually restores this page from the
+ * browser's back/forward cache — with the pre-purchase cart still in memory,
+ * and `hydrate()` long since done. Re-sync whenever the page is shown again:
+ * Shopify invalidates a cart once its checkout completes, so `getCart` comes
+ * back null, the stale cookie is cleared, and the UI empties. An abandoned
+ * checkout re-fetches the same still-live cart, so nothing is lost.
+ */
+let resyncInstalled = false;
+
+function installResync() {
+  if (resyncInstalled || typeof window === "undefined") return;
+  resyncInstalled = true;
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) void refreshCart();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refreshCart();
+  });
 }
 
 export function getCartSnapshot(): Cart | null {
