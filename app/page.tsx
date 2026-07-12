@@ -44,6 +44,19 @@ export default async function Home() {
       <main className="flex-1">
         {/* Hero */}
         <section className="relative flex min-h-[86vh] items-end overflow-hidden">
+          {/* Fallback stills shown until the video renders its first frame */}
+          <img
+            src="/media/images/homepage/vlcsnap-2026-06-21-15h58m40s674.png"
+            alt=""
+            className="absolute inset-0 hidden h-full w-full object-cover object-top lg:block"
+            aria-hidden="true"
+          />
+          <img
+            src="/media/videos/homepage/home-placehoolder.png"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover object-top lg:hidden"
+            aria-hidden="true"
+          />
           <video
             className="absolute inset-0 h-full w-full object-cover object-top"
             autoPlay
@@ -51,7 +64,6 @@ export default async function Home() {
             loop
             playsInline
             preload="auto"
-            poster="/media/images/homepage/vlcsnap-2026-06-21-15h58m40s674.png"
             aria-hidden="true"
           >
             <source
