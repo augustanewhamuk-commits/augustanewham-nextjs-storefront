@@ -1,8 +1,21 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { sendContactAction, type ContactResult } from "@/lib/contact-actions";
 import { site } from "@/lib/site";
+
+/**
+ * Give up waiting on the server after this long — the send retries server-side
+ * for up to ~20s worst case; past that the visitor deserves an answer.
+ */
+const CLIENT_TIMEOUT_MS = 25_000;
+
+const TIMED_OUT: ContactResult = {
+  ok: false,
+  code: "send_failed",
+  error: `This is taking longer than it should. Please try again, or email us directly at ${site.email}.`,
+};
 
 const fieldLabel =
   "block font-body text-[11px] uppercase tracking-[0.18em] text-brand-gray";
@@ -18,43 +31,58 @@ const INTERESTS = [
 ];
 
 /**
- * Static-site contact form: composes a pre-filled email and opens the
- * visitor's mail client (no backend required).
+ * Contact form — submits to a server action that emails the message to the
+ * brand mailbox over SMTP (lib/contact-actions.ts). No mail client involved.
  */
 export function ContactForm() {
-  const [opened, setOpened] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const name = String(data.get("name") ?? "").trim();
-    const email = String(data.get("email") ?? "").trim();
-    const interest = String(data.get("interest") ?? "").trim();
-    const phone = String(data.get("phone") ?? "").trim();
-    const message = String(data.get("message") ?? "").trim();
-
-    const body = [
-      `Name: ${name}`,
-      `Email: ${email}`,
-      phone ? `Phone: ${phone}` : null,
-      interest ? `Interested in: ${interest}` : null,
-      "",
-      message,
-    ]
-      .filter((line) => line !== null)
-      .join("\n");
-
-    const subject = interest
-      ? `Website enquiry — ${interest}`
-      : "Website enquiry";
-    window.location.href = `mailto:${site.email}?subject=${encodeURIComponent(
-      subject,
-    )}&body=${encodeURIComponent(body)}`;
-    setOpened(true);
+    if (sending) return;
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    setSending(true);
+    setError(null);
+    setSent(false);
+    let result: ContactResult;
+    try {
+      result = await Promise.race([
+        sendContactAction({
+          name: String(data.get("name") ?? ""),
+          email: String(data.get("email") ?? ""),
+          phone: String(data.get("phone") ?? ""),
+          interest: String(data.get("interest") ?? ""),
+          message: String(data.get("message") ?? ""),
+          company: String(data.get("company") ?? ""),
+        }),
+        new Promise<ContactResult>((resolve) =>
+          window.setTimeout(() => resolve(TIMED_OUT), CLIENT_TIMEOUT_MS),
+        ),
+      ]);
+    } catch {
+      // Network drop / server unreachable — the action never answered.
+      result = TIMED_OUT;
+    }
+    setSending(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    form.reset();
+    setSent(true);
   };
 
   return (
-    <form onSubmit={onSubmit}>
+    <form
+      onSubmit={onSubmit}
+      // Editing after a failure clears the message straight away.
+      onInput={() => {
+        if (error) setError(null);
+      }}
+    >
       <div className="grid gap-6 sm:grid-cols-2">
         <div>
           <label htmlFor="name" className={fieldLabel}>
@@ -135,18 +163,41 @@ export function ContactForm() {
         />
       </div>
 
+      {/* Honeypot — visually hidden; bots that fill it are silently dropped. */}
+      <div aria-hidden="true" className="absolute -left-[9999px] top-auto h-px w-px overflow-hidden">
+        <label htmlFor="company">Company</label>
+        <input id="company" name="company" type="text" tabIndex={-1} autoComplete="off" />
+      </div>
+
       <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
         <button
           type="submit"
-          className="inline-flex items-center gap-2 bg-brand-black px-7 py-3 font-body text-[12px] uppercase tracking-[0.12em] text-brand-white transition-colors hover:bg-brand-gray"
+          disabled={sending}
+          className="inline-flex items-center gap-2 bg-brand-black px-7 py-3 font-body text-[12px] uppercase tracking-[0.12em] text-brand-white transition-colors hover:bg-brand-gray disabled:cursor-wait disabled:bg-brand-gray/60"
         >
-          Submit
-          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          {sending ? (
+            "Sending…"
+          ) : sent ? (
+            <>
+              <Check className="h-4 w-4" aria-hidden="true" />
+              Sent
+            </>
+          ) : (
+            <>
+              Submit
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </>
+          )}
         </button>
-        <p className="font-body text-[12px] text-brand-gray" aria-live="polite">
-          {opened
-            ? `Your email app should have opened. If not, email us at ${site.email}.`
-            : "Sending opens your email app with the message ready to go."}
+        <p
+          className={`font-body text-[12px] ${error ? "text-red-700" : "text-brand-gray"}`}
+          aria-live="polite"
+        >
+          {error
+            ? error
+            : sent
+              ? "Thank you — your message has been sent. We'll get back to you soon."
+              : ""}
         </p>
       </div>
     </form>
