@@ -17,6 +17,7 @@ import {
   siteNavigationSchema,
 } from "@/lib/structured-data";
 
+
 // Body text — README §3.2
 const inter = Inter({
   variable: "--font-inter",
