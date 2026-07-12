@@ -159,9 +159,10 @@ export async function sendContactAction(input: ContactInput): Promise<ContactRes
     return { ok: false, code: "send_failed", error: SEND_FAILED };
   }
 
-  const port = Number(process.env.CONTACT_SMTP_PORT ?? 465);
+  // `||` not `??`: an empty `CONTACT_SMTP_HOST=` line in .env still defaults.
+  const port = Number(process.env.CONTACT_SMTP_PORT || 465);
   const transporter = nodemailer.createTransport({
-    host: process.env.CONTACT_SMTP_HOST ?? "mail.privateemail.com",
+    host: process.env.CONTACT_SMTP_HOST || "mail.privateemail.com",
     port,
     secure: port === 465,
     auth: { user, pass },
