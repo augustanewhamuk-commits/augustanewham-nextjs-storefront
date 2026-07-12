@@ -116,6 +116,11 @@ export function ProductCard({
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
+            {variant.sizes.length === 0 ? (
+              <p className="px-1 pb-1 font-body text-[11px] text-brand-gray">
+                Sold out in this colour.
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-1">
               {variant.sizes.map((size) => {
                 const busy = adding === size;

@@ -119,8 +119,11 @@ export function toProduct(p: ShopifyProduct): Product {
       const matching = p.variants.filter(
         (v) => valueOf(v.selectedOptions, colorOption.name) === cv.name,
       );
+      // Only sizes that are in stock — a sold-out size is hidden entirely so
+      // it can't be ordered. An empty list means the colour is sold out.
       const sizes = sizeOption
         ? matching
+            .filter((v) => v.availableForSale)
             .map((v) => valueOf(v.selectedOptions, sizeOption.name))
             .filter((s): s is string => Boolean(s))
         : [];
@@ -133,8 +136,17 @@ export function toProduct(p: ShopifyProduct): Product {
       };
     });
   } else {
-    // No colour option: a single (label-less) variant carrying every size.
-    const sizes = sizeOption?.optionValues.map((v) => v.name) ?? [];
+    // No colour option: a single (label-less) variant carrying every in-stock size.
+    const sizes = sizeOption
+      ? [
+          ...new Set(
+            p.variants
+              .filter((v) => v.availableForSale)
+              .map((v) => valueOf(v.selectedOptions, sizeOption.name))
+              .filter((s): s is string => Boolean(s)),
+          ),
+        ]
+      : [];
     variants = [{ color: "", hex: DEFAULT_HEX, images: imagesFor(p.variants), sizes }];
   }
 

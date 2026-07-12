@@ -56,12 +56,12 @@ export default async function Home() {
           >
             <source
               media="(min-width: 1024px)"
-              src="/media/videos/homepage/about-hero-video-.8-new.mp4"
+              src="/media/videos/homepage/about-hero-video-.8-new.webm"
               type="video/mp4"
             />
             <source
               media="(max-width: 1023.98px)"
-              src="/media/videos/homepage/homepage-video-mobile.mp4"
+              src="/media/videos/homepage/homepage-video-mobile.webm"
               type="video/mp4"
             />
           </video>

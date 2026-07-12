@@ -179,23 +179,29 @@ export function ProductDetail({ product }: { product: Product }) {
               Size guide
             </Link>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {variant.sizes.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSize(s)}
-                aria-pressed={s === size}
-                className={`min-w-12 border px-3 py-2 font-body text-[13px] uppercase tracking-[0.06em] transition-colors ${
-                  s === size
-                    ? "border-brand-black bg-brand-black text-brand-white"
-                    : "border-brand-light-gray text-brand-black hover:border-brand-black"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          {variant.sizes.length === 0 ? (
+            <p className="mt-3 font-body text-[13px] text-brand-gray">
+              This colour is currently sold out.
+            </p>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {variant.sizes.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSize(s)}
+                  aria-pressed={s === size}
+                  className={`min-w-12 border px-3 py-2 font-body text-[13px] uppercase tracking-[0.06em] transition-colors ${
+                    s === size
+                      ? "border-brand-black bg-brand-black text-brand-white"
+                      : "border-brand-light-gray text-brand-black hover:border-brand-black"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Quantity + add */}
@@ -236,12 +242,14 @@ export function ProductDetail({ product }: { product: Product }) {
                 <Check className="h-4 w-4" aria-hidden="true" />
                 Added
               </>
+            ) : variant.sizes.length === 0 ? (
+              "Sold Out"
             ) : (
               "Add to Cart"
             )}
           </button>
         </div>
-        {!size ? (
+        {!size && variant.sizes.length > 0 ? (
           <p className="mt-3 font-body text-[12px] text-brand-gray">
             Please select a size.
           </p>
