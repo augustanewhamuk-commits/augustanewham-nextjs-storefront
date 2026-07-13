@@ -9,7 +9,6 @@ import { getCatalogCollections } from "@/lib/catalog";
 import { getMarkets } from "@/lib/country";
 import { Footer } from "@/components/Footer";
 import { CartDrawer } from "@/components/CartDrawer";
-import { RouteLoader } from "@/components/RouteLoader";
 import { SmoothScroll } from "@/components/SmoothScroll";
 import {
   organizationSchema,
@@ -125,7 +124,6 @@ export default async function RootLayout({
           ]}
         />
         <SmoothScroll />
-        <RouteLoader />
         <Header
           collections={navCollections}
           currencies={markets.currencies}

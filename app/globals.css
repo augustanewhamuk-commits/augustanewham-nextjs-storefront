@@ -130,74 +130,6 @@ header[data-theme="transparent"] [role="dialog"] .border-brand-light-gray {
 }
 
 /*
-  Route loader — the brand logo "draws" itself while a page loads.
-  Driven by components/RouteLoader.tsx. Only shown for navigations slower
-  than ~0.9s; loops while loading, then one fast final draw before leaving.
-*/
-.brand-overlay {
-  animation: brand-overlay-in 220ms ease-out both;
-}
-@keyframes brand-overlay-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* pathLength=1 normalises both paths, so a single dash length draws either. */
-.brand-draw-path {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-}
-
-/* Looping draw while the next page is still loading. */
-.brand-draw-loop .brand-draw-path {
-  animation: brand-draw-loop 1500ms ease-in-out infinite;
-}
-@keyframes brand-draw-loop {
-  0% {
-    stroke-dashoffset: 1;
-    opacity: 0;
-  }
-  18% {
-    opacity: 1;
-  }
-  55% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-  80% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-  100% {
-    stroke-dashoffset: 0;
-    opacity: 0;
-  }
-}
-
-/* One quick final draw once the page is ready — guarantees a finished logo. */
-.brand-draw-once .brand-draw-path {
-  animation: brand-draw-once 460ms ease-in-out forwards;
-}
-@keyframes brand-draw-once {
-  0% {
-    stroke-dashoffset: 1;
-    opacity: 0.2;
-  }
-  85% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-  100% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-}
-
-/*
   Legal / policy prose — keeps the long-form pages (terms, privacy) styled
   from one place instead of class soup on every paragraph.
 */
@@ -258,8 +190,7 @@ header[data-theme="transparent"] [role="dialog"] .border-brand-light-gray {
 */
 @media print {
   header,
-  footer,
-  .brand-overlay {
+  footer {
     display: none !important;
   }
   body {
@@ -268,15 +199,5 @@ header[data-theme="transparent"] [role="dialog"] .border-brand-light-gray {
   * {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-  }
-}
-
-/* Reduced motion: skip the drawing, just show the finished logo. */
-@media (prefers-reduced-motion: reduce) {
-  .brand-draw-loop .brand-draw-path,
-  .brand-draw-once .brand-draw-path {
-    animation: none;
-    stroke-dashoffset: 0;
-    opacity: 1;
   }
 }
