@@ -10,7 +10,7 @@ export const site = {
   locale: "en_GB",
   language: "en-GB",
   email: "contactus@augustanewham.com",
-  tagline: "Lingerie & Shapewear",
+  tagline: "Lingerie, Shapewear & Clothing Staple",
   description:
     "Our staple and basewear are designed in fabrics which gives comfort and shades that celebrate every skin tone. Shop our bralettes, bodysuits, shapewear and high waist briefs.",
   social: {
