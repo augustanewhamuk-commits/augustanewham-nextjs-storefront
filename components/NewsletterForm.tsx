@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { subscribeAction } from "@/lib/subscribe-actions";
 import { refreshCart } from "@/lib/cart";
 import { SUBSCRIBE_PROMPTED_KEY } from "./SubscribeModal";
@@ -24,7 +24,12 @@ export function NewsletterForm() {
     if (status === "loading") return;
     setStatus("loading");
     setError(null);
-    const result = await subscribeAction(email);
+    // A network drop rejects the action itself — treat it like a form error
+    // so the form never hangs in the loading state.
+    const result = await subscribeAction(email).catch(() => ({
+      error: "We couldn't reach the store — please try again in a moment.",
+      success: undefined,
+    }));
     if (result.error) {
       setStatus("idle");
       setError(result.error);
@@ -73,10 +78,11 @@ export function NewsletterForm() {
           disabled={status === "loading"}
           className="inline-flex p-2 text-brand-black transition-colors hover:text-brand-gray disabled:opacity-60"
         >
-          <ArrowRight
-            className={`h-5 w-5 ${status === "loading" ? "animate-pulse" : ""}`}
-            aria-hidden="true"
-          />
+          {status === "loading" ? (
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          ) : (
+            <ArrowRight className="h-5 w-5" aria-hidden="true" />
+          )}
         </button>
       </div>
       {error ? (

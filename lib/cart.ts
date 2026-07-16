@@ -405,7 +405,9 @@ export async function cartSettled(): Promise<Cart | null> {
 export function formatMoney(money: Money): string {
   const amount = Number(money.amount);
   try {
-    return new Intl.NumberFormat(undefined, {
+    // Pinned to the site locale so cart prices match the catalogue's
+    // formatting (see formatPrice in lib/currency.ts).
+    return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency: money.currencyCode,
     }).format(amount);

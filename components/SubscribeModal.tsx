@@ -76,7 +76,12 @@ export function SubscribeModal({ enabled }: { enabled: boolean }) {
     if (status === "loading") return;
     setStatus("loading");
     setError(null);
-    const result = await subscribeAction(email);
+    // A network drop rejects the action itself — treat it like a form error
+    // so the modal never hangs in the loading state.
+    const result = await subscribeAction(email).catch(() => ({
+      error: "We couldn't reach the store — please try again in a moment.",
+      success: undefined,
+    }));
     if (result.error) {
       setStatus("idle");
       setError(result.error);

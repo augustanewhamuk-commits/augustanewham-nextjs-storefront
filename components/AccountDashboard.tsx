@@ -97,7 +97,9 @@ const addressHeading = (a: CustomerAddress): string =>
 const formatMoney = (m: Money): string => {
   const amount = Number(m.amount);
   try {
-    return new Intl.NumberFormat(undefined, {
+    // Pinned to the site locale — SSR + client must format identically or
+    // React reports a hydration mismatch (see formatPrice in lib/currency.ts).
+    return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency: m.currencyCode,
     }).format(amount);

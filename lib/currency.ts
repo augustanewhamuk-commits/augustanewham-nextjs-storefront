@@ -69,11 +69,15 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 /**
  * Format a Shopify money amount in its own currency. `amount` is the numeric
  * value Shopify returned (already in `currencyCode`); no conversion happens here.
- * Locale is left to the runtime so symbols/grouping read naturally.
+ *
+ * The locale is pinned to the site's (en-GB) rather than the runtime's: prices
+ * render in server components/SSR *and* on the client, and letting each side
+ * use its own locale makes the strings differ (e.g. Node "NGN 40,000.00" vs a
+ * Nigerian browser's "₦40,000.00"), which is a React hydration error.
  */
 export function formatPrice(amount: number, currencyCode: string): string {
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency: currencyCode,
     }).format(amount);

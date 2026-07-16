@@ -14,6 +14,7 @@ import {
   subscribeCustomer,
   subscribeLoggedInCustomer,
 } from "@/lib/customer";
+import { adminSubscribeEmail, hasAdminApi } from "@/lib/shopify-admin";
 import { getCustomerToken } from "@/lib/session";
 import { markSubscribed, setBuyerEmail } from "@/lib/subscriber";
 
@@ -31,36 +32,57 @@ export async function subscribeAction(email: string): Promise<SubscribeState> {
     return { error: "Enter a valid email address." };
   }
 
-  // Logged-in shopper subscribing their own account email: flip marketing
-  // consent on the account directly (customerCreate would report it as taken).
-  const token = await getCustomerToken();
-  if (token) {
-    const profile = await getCustomerSummary(token);
-    if (profile?.email && profile.email.toLowerCase() === trimmed) {
-      const errors = await subscribeLoggedInCustomer(token);
-      if (errors.length > 0) return { error: errors[0].message };
+  // Shopify being unreachable must surface as a friendly form error, never as
+  // a thrown action (which leaves the client form hanging).
+  try {
+    // Preferred path: Admin API sets marketing consent directly — works for
+    // existing/inactivated customer records (where Storefront customerCreate
+    // fires an account-activation email instead of subscribing) and sends no
+    // account emails at all. Available once ADMIN_API_ACCESS_TOKEN is set.
+    if (hasAdminApi()) {
+      const ok = await adminSubscribeEmail(trimmed);
+      if (!ok) return { error: "Something went wrong — please try again." };
       await setBuyerEmail(trimmed);
       await markSubscribed();
       return SUCCESS;
     }
-  }
 
-  const result = await subscribeCustomer(trimmed);
+    // Storefront-only fallback (no admin token configured):
+    // Logged-in shopper subscribing their own account email: flip marketing
+    // consent on the account directly (customerCreate would report it as taken).
+    const token = await getCustomerToken();
+    if (token) {
+      const profile = await getCustomerSummary(token);
+      if (profile?.email && profile.email.toLowerCase() === trimmed) {
+        const errors = await subscribeLoggedInCustomer(token);
+        if (errors.length > 0) return { error: errors[0].message };
+        await setBuyerEmail(trimmed);
+        await markSubscribed();
+        return SUCCESS;
+      }
+    }
 
-  if (result === "subscribed") {
-    await setBuyerEmail(trimmed);
-    await markSubscribed();
-    return SUCCESS;
-  }
+    const result = await subscribeCustomer(trimmed);
 
-  if (result === "existing_account") {
-    // The email already has an account whose consent we can't change from
-    // here. Still stamp it on carts — Shopify only grants the discount if the
-    // email is genuinely subscribed — but don't claim subscriber prices.
-    await setBuyerEmail(trimmed);
+    if (result === "subscribed") {
+      await setBuyerEmail(trimmed);
+      await markSubscribed();
+      return SUCCESS;
+    }
+
+    if (result === "existing_account") {
+      // The email already has an account whose consent we can't change from
+      // here. Still stamp it on carts — Shopify only grants the discount if the
+      // email is genuinely subscribed — but don't claim subscriber prices.
+      await setBuyerEmail(trimmed);
+      return {
+        success:
+          "This email already has an account — sign in to manage email preferences.",
+      };
+    }
+  } catch {
     return {
-      success:
-        "This email already has an account — sign in to manage email preferences.",
+      error: "We couldn't reach the store — please try again in a moment.",
     };
   }
 
