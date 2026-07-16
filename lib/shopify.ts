@@ -57,6 +57,9 @@ export async function shopifyFetch<T>(
     headers,
     body: JSON.stringify({ query, variables }),
     next: { revalidate },
+    // A stalled connection must fail fast (surfaced as a friendly error by
+    // callers) rather than hang a server action's response indefinitely.
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {

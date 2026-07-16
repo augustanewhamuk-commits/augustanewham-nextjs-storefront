@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
-import { subscribeAction } from "@/lib/subscribe-actions";
 import { refreshCart } from "@/lib/cart";
-import { SUBSCRIBE_PROMPTED_KEY } from "./SubscribeModal";
+import { SUBSCRIBE_PROMPTED_KEY, subscribeWithTimeout } from "./SubscribeModal";
 
 /**
  * Footer newsletter signup — creates the subscriber in Shopify (see
@@ -24,12 +23,7 @@ export function NewsletterForm() {
     if (status === "loading") return;
     setStatus("loading");
     setError(null);
-    // A network drop rejects the action itself — treat it like a form error
-    // so the form never hangs in the loading state.
-    const result = await subscribeAction(email).catch(() => ({
-      error: "We couldn't reach the store — please try again in a moment.",
-      success: undefined,
-    }));
+    const result = await subscribeWithTimeout(email);
     if (result.error) {
       setStatus("idle");
       setError(result.error);

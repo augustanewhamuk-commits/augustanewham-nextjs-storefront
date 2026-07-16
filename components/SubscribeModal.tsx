@@ -3,13 +3,31 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
-import { subscribeAction } from "@/lib/subscribe-actions";
+import { subscribeAction, type SubscribeState } from "@/lib/subscribe-actions";
 import { SUBSCRIBER_DISCOUNT_PERCENT } from "@/lib/discount";
 import { refreshCart } from "@/lib/cart";
 import { errorText, fieldInput, primaryButton } from "./form-styles";
 
 /** Once set for the browser session, the prompt stays away. */
 export const SUBSCRIBE_PROMPTED_KEY = "an-subscribe-prompted";
+
+const NETWORK_ERROR: SubscribeState = {
+  error: "We couldn't reach the store — please try again in a moment.",
+};
+
+/**
+ * Run the subscribe action with a hard client-side deadline. The server call
+ * has its own 10s Shopify timeout, but if the *action response* itself stalls
+ * (flaky network) the form must still recover rather than spin forever.
+ */
+export function subscribeWithTimeout(email: string): Promise<SubscribeState> {
+  return Promise.race([
+    subscribeAction(email),
+    new Promise<SubscribeState>((resolve) =>
+      window.setTimeout(() => resolve(NETWORK_ERROR), 15_000),
+    ),
+  ]).catch(() => NETWORK_ERROR);
+}
 
 /** Don't interrupt someone who is mid-auth or checking out. */
 const QUIET_ROUTES = [
@@ -76,12 +94,7 @@ export function SubscribeModal({ enabled }: { enabled: boolean }) {
     if (status === "loading") return;
     setStatus("loading");
     setError(null);
-    // A network drop rejects the action itself — treat it like a form error
-    // so the modal never hangs in the loading state.
-    const result = await subscribeAction(email).catch(() => ({
-      error: "We couldn't reach the store — please try again in a moment.",
-      success: undefined,
-    }));
+    const result = await subscribeWithTimeout(email);
     if (result.error) {
       setStatus("idle");
       setError(result.error);

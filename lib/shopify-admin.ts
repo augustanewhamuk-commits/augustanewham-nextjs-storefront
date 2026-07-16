@@ -2,37 +2,90 @@
  * Minimal Shopify Admin GraphQL client — used only for newsletter subscription
  * (setting email marketing consent, which the Storefront API can't do).
  *
- * Requires ADMIN_API_ACCESS_TOKEN in .env.local: a custom-app Admin token with
- * `read_customers` + `write_customers` scopes (Settings → Apps and sales
- * channels → Develop apps). Server-only — the token must never reach the
- * browser. When the token isn't configured, callers fall back to the
- * Storefront flow (see lib/subscribe-actions.ts).
+ * Auth (server-only — none of these values may reach the browser), first match
+ * wins:
+ *   1. ADMIN_API_ACCESS_TOKEN — a static `shpat_` token (legacy admin-created
+ *      custom apps, pre-2026).
+ *   2. SHOPIFY_ADMIN_CLIENT_ID + SHOPIFY_ADMIN_CLIENT_SECRET — the 2026 Dev
+ *      Dashboard model: tokens no longer appear in any UI; instead the app's
+ *      client credentials are exchanged for a ~24h admin token
+ *      (client_credentials grant, org-owned app installed on the store),
+ *      which we cache in memory and refresh before expiry.
+ *
+ * The app must have the `read_customers` + `write_customers` Admin scopes.
+ * When neither auth is configured, callers fall back to the Storefront flow
+ * (see lib/subscribe-actions.ts).
  */
 
 const RAW_DOMAIN = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN ?? "";
 const API_VERSION = process.env.SHOPIFY_STOREFRONT_API_VERSION ?? "2025-01";
-const ADMIN_TOKEN = process.env.ADMIN_API_ACCESS_TOKEN ?? "";
+const STATIC_TOKEN = process.env.ADMIN_API_ACCESS_TOKEN ?? "";
+const CLIENT_ID = process.env.SHOPIFY_ADMIN_CLIENT_ID ?? "";
+const CLIENT_SECRET = process.env.SHOPIFY_ADMIN_CLIENT_SECRET ?? "";
 
-export const hasAdminApi = (): boolean => Boolean(ADMIN_TOKEN);
+export const hasAdminApi = (): boolean =>
+  Boolean(STATIC_TOKEN || (CLIENT_ID && CLIENT_SECRET));
+
+function host(): string {
+  return RAW_DOMAIN.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+}
 
 function endpoint(): string {
-  const host = RAW_DOMAIN.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  return `https://${host}/admin/api/${API_VERSION}/graphql.json`;
+  return `https://${host()}/admin/api/${API_VERSION}/graphql.json`;
+}
+
+/** In-memory admin token from the client-credentials exchange. */
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+/** A valid admin token — static if configured, otherwise minted + cached. */
+async function getAdminToken(): Promise<string> {
+  if (STATIC_TOKEN) return STATIC_TOKEN;
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    throw new Error("Shopify Admin API credentials are not configured");
+  }
+  // Refresh with a 5-minute safety margin before the ~24h expiry.
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 5 * 60_000) {
+    return cachedToken.token;
+  }
+  const res = await fetch(`https://${host()}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Shopify client-credentials grant ${res.status}: ${await res.text()}`,
+    );
+  }
+  const json = (await res.json()) as { access_token: string; expires_in: number };
+  cachedToken = {
+    token: json.access_token,
+    expiresAt: Date.now() + json.expires_in * 1000,
+  };
+  return cachedToken.token;
 }
 
 async function adminFetch<T>(
   query: string,
   variables: Record<string, unknown> = {},
 ): Promise<T> {
-  if (!ADMIN_TOKEN) throw new Error("ADMIN_API_ACCESS_TOKEN is not set");
+  const token = await getAdminToken();
   const res = await fetch(endpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Shopify-Access-Token": ADMIN_TOKEN,
+      "X-Shopify-Access-Token": token,
     },
     body: JSON.stringify({ query, variables }),
     cache: "no-store",
+    // Fail fast on a stalled connection instead of hanging the form.
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     throw new Error(`Shopify Admin API ${res.status}: ${await res.text()}`);
