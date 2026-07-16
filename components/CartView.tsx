@@ -129,11 +129,19 @@ export function CartView() {
                   </p>
                 </div>
                 <span
-                  className={`font-body text-[15px] text-brand-black tabular-nums transition-opacity ${
+                  className={`shrink-0 font-body text-[15px] text-brand-black tabular-nums transition-opacity ${
                     pendingLines.has(line.id) ? "opacity-40" : "opacity-100"
                   }`}
                 >
                   {formatMoney(line.lineTotal)}
+                  {line.lineOriginal.amount !== line.lineTotal.amount ? (
+                    <>
+                      {" "}
+                      <s className="text-brand-gray">
+                        {formatMoney(line.lineOriginal)}
+                      </s>
+                    </>
+                  ) : null}
                 </span>
               </div>
 
@@ -190,6 +198,16 @@ export function CartView() {
                 {cart ? formatMoney(cart.subtotal) : null}
               </dd>
             </div>
+            {cart?.discount ? (
+              <div className="flex items-center justify-between">
+                <dt className="text-brand-gray">
+                  {cart.discount.title ?? "Discount"}
+                </dt>
+                <dd className="text-brand-black tabular-nums">
+                  −{formatMoney(cart.discount.amount)}
+                </dd>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between">
               <dt className="text-brand-gray">Shipping</dt>
               <dd className="text-brand-gray">Calculated at checkout</dd>
@@ -200,7 +218,7 @@ export function CartView() {
               Total
             </span>
             <span className="text-[16px] font-medium text-brand-black tabular-nums">
-              {cart ? formatMoney(cart.subtotal) : null}
+              {cart ? formatMoney(cart.total) : null}
             </span>
           </div>
 

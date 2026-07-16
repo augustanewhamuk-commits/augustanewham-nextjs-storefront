@@ -10,6 +10,11 @@ import { getMarkets } from "@/lib/country";
 import { Footer } from "@/components/Footer";
 import { CartDrawer } from "@/components/CartDrawer";
 import { SmoothScroll } from "@/components/SmoothScroll";
+import { SubscribeModal } from "@/components/SubscribeModal";
+import { SubscriberProvider } from "@/components/SubscriberContext";
+import { getCustomerToken } from "@/lib/session";
+import { isSubscriber } from "@/lib/subscriber";
+import { SUBSCRIBER_DISCOUNT_PERCENT } from "@/lib/discount";
 import {
   organizationSchema,
   websiteSchema,
@@ -104,11 +109,18 @@ export default async function RootLayout({
 }>) {
   // Live Shopify collections drive the Shop dropdown (max 4); Shopify markets
   // drive the currency selector (auto-detected country, user override via cookie).
-  const [collections, markets] = await Promise.all([
+  const [collections, markets, subscribed, customerToken] = await Promise.all([
     getCatalogCollections(4),
     getMarkets(),
+    isSubscriber(),
+    getCustomerToken(),
   ]);
   const navCollections = collections.map((c) => ({ label: c.title, path: c.path }));
+
+  // Subscribers see slashed prices; everyone else may get the one-per-session
+  // signup prompt (never shown to logged-in customers — they were synced at login).
+  const discountPercent = subscribed ? SUBSCRIBER_DISCOUNT_PERCENT : null;
+  const promptEligible = !subscribed && !customerToken;
 
   return (
     <html
@@ -124,14 +136,17 @@ export default async function RootLayout({
           ]}
         />
         <SmoothScroll />
-        <Header
-          collections={navCollections}
-          currencies={markets.currencies}
-          currentCurrency={markets.current}
-        />
-        {children}
-        <Footer />
-        <CartDrawer />
+        <SubscriberProvider discountPercent={discountPercent}>
+          <Header
+            collections={navCollections}
+            currencies={markets.currencies}
+            currentCurrency={markets.current}
+          />
+          {children}
+          <Footer />
+          <CartDrawer />
+          <SubscribeModal enabled={promptEligible} />
+        </SubscriberProvider>
       </body>
     </html>
   );

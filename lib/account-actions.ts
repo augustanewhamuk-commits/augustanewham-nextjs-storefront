@@ -18,6 +18,7 @@ import {
   createCustomerAddress,
   deleteCustomerAddress,
   deleteCustomerToken,
+  getCustomerSummary,
   loginCustomer,
   recoverCustomer,
   registerCustomer,
@@ -31,8 +32,25 @@ import {
   getCustomerToken,
   setCustomerToken,
 } from "@/lib/session";
+import { markSubscribed, setBuyerEmail } from "@/lib/subscriber";
 
 export type FormState = { error?: string; success?: string };
+
+/**
+ * Stamp the subscriber cookies from a fresh session: the account email always
+ * goes on future carts' buyerIdentity (so segment discounts can apply), and the
+ * subscriber display flag follows the profile's marketing consent. Best-effort —
+ * a failure here must never block login.
+ */
+async function syncSubscriberCookies(accessToken: string): Promise<void> {
+  try {
+    const profile = await getCustomerSummary(accessToken);
+    if (profile?.email) await setBuyerEmail(profile.email.toLowerCase());
+    if (profile?.acceptsMarketing) await markSubscribed();
+  } catch {
+    // Non-fatal — the cart self-heal will pick identity up on a later login.
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Auth                                                                */
@@ -50,6 +68,7 @@ export async function loginAction(
   if ("error" in result) return { error: result.error };
 
   await setCustomerToken(result.accessToken, result.expiresAt);
+  await syncSubscriberCookies(result.accessToken);
   redirect("/account");
 }
 
@@ -62,14 +81,26 @@ export async function registerAction(
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirmPassword") ?? "");
+  const acceptsMarketing = formData.get("acceptsMarketing") === "on";
 
   if (!firstName || !lastName || !email || !password) {
     return { error: "Please fill in all fields." };
   }
   if (password !== confirm) return { error: "Passwords don't match." };
 
-  const errors = await registerCustomer({ firstName, lastName, email, password });
+  const errors = await registerCustomer({
+    firstName,
+    lastName,
+    email,
+    password,
+    acceptsMarketing,
+  });
   if (errors.length > 0) return { error: errors[0].message };
+
+  // Their email rides on future carts either way; the subscriber prices only
+  // unlock when they've actually opted in to marketing.
+  await setBuyerEmail(email.toLowerCase());
+  if (acceptsMarketing) await markSubscribed();
 
   // Account created — log in straight away for a seamless first session.
   const token = await loginCustomer(email, password);
@@ -109,6 +140,7 @@ export async function resetAction(
   if ("error" in result) return { error: result.error };
 
   await setCustomerToken(result.accessToken, result.expiresAt);
+  await syncSubscriberCookies(result.accessToken);
   redirect("/account");
 }
 

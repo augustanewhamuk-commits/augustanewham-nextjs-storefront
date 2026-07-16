@@ -13,6 +13,7 @@
  * Requires the app's Storefront scopes to include `unauthenticated_read_customers`
  * and `unauthenticated_write_customers`.
  */
+import { randomBytes } from "crypto";
 import { shopifyFetch } from "./shopify";
 
 export type UserError = {
@@ -126,6 +127,8 @@ export async function registerCustomer(input: {
   lastName: string;
   email: string;
   password: string;
+  /** Marketing opt-in — makes the customer an email subscriber in Shopify. */
+  acceptsMarketing?: boolean;
 }): Promise<UserError[]> {
   const data = await shopifyFetch<{
     customerCreate: { customerUserErrors: UserError[] };
@@ -142,6 +145,87 @@ export async function registerCustomer(input: {
     0,
   );
   return data.customerCreate.customerUserErrors;
+}
+
+export type SubscribeResult = "subscribed" | "existing_account" | "error";
+
+/**
+ * Newsletter signup for a visitor with no account. The Storefront API's
+ * `customerCreate` requires a password, so we mint a random throwaway one —
+ * the subscriber can claim the account later via "forgot password". Returns
+ * "existing_account" when the email already belongs to a customer (whose
+ * marketing consent we can't change without their session token).
+ */
+export async function subscribeCustomer(email: string): Promise<SubscribeResult> {
+  const data = await shopifyFetch<{
+    customerCreate: { customerUserErrors: UserError[] };
+  }>(
+    /* GraphQL */ `
+      mutation SubscribeCreate($input: CustomerCreateInput!) {
+        customerCreate(input: $input) {
+          customer { id }
+          customerUserErrors { field message code }
+        }
+      }
+    `,
+    {
+      input: {
+        email,
+        password: randomBytes(24).toString("base64url"),
+        acceptsMarketing: true,
+      },
+    },
+    0,
+  );
+  const errors = data.customerCreate.customerUserErrors;
+  if (errors.length === 0) return "subscribed";
+  if (errors.some((e) => e.code === "TAKEN")) return "existing_account";
+  return "error";
+}
+
+/** Flip marketing consent on for a logged-in customer (newsletter opt-in). */
+export async function subscribeLoggedInCustomer(
+  accessToken: string,
+): Promise<UserError[]> {
+  const data = await shopifyFetch<{
+    customerUpdate: { customerUserErrors: UserError[] };
+  }>(
+    /* GraphQL */ `
+      mutation Subscribe($customerAccessToken: String!) {
+        customerUpdate(
+          customerAccessToken: $customerAccessToken
+          customer: { acceptsMarketing: true }
+        ) {
+          customer { id }
+          customerUserErrors { field message code }
+        }
+      }
+    `,
+    { customerAccessToken: accessToken },
+    0,
+  );
+  return data.customerUpdate.customerUserErrors;
+}
+
+/** Light profile read for auth flows — email + marketing consent only. */
+export async function getCustomerSummary(
+  accessToken: string,
+): Promise<{ email: string | null; acceptsMarketing: boolean } | null> {
+  const data = await shopifyFetch<{
+    customer: { email: string | null; acceptsMarketing: boolean } | null;
+  }>(
+    /* GraphQL */ `
+      query CustomerSummary($token: String!) {
+        customer(customerAccessToken: $token) {
+          email
+          acceptsMarketing
+        }
+      }
+    `,
+    { token: accessToken },
+    0,
+  );
+  return data.customer;
 }
 
 /** Send a password-reset email. Errors are intentionally swallowed by callers. */

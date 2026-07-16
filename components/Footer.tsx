@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { footerRoutes } from "@/lib/routes";
 import { site } from "@/lib/site";
 import { BrandMark } from "./BrandMark";
+import { NewsletterForm } from "./NewsletterForm";
 import { SocialLinks } from "./SocialLinks";
 
 export function Footer() {
@@ -45,7 +45,7 @@ export function Footer() {
             </ul>
           </nav>
 
-          {/* Right — newsletter (visual only, no submission) + socials */}
+          {/* Right — newsletter signup (Shopify subscriber = 10% off) + socials */}
           <div className="w-full md:ml-auto md:max-w-md">
             <h2 className="font-wordmark text-[13px] uppercase tracking-[0.2em] text-brand-black">
               Sign up and save
@@ -55,25 +55,7 @@ export function Footer() {
               once-in-a-lifetime deals.
             </p>
 
-            <div className="mt-5 flex items-center border-b border-brand-black">
-              <label htmlFor="newsletter-email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="newsletter-email"
-                type="email"
-                placeholder="Email address"
-                autoComplete="email"
-                className="w-full bg-transparent py-2 text-[14px] text-brand-black outline-none placeholder:text-brand-gray"
-              />
-              <button
-                type="button"
-                aria-label="Subscribe"
-                className="inline-flex p-2 text-brand-black transition-colors hover:text-brand-gray"
-              >
-                <ArrowRight className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
+            <NewsletterForm />
 
             <SocialLinks className="mt-6" iconClassName="h-6 w-6" />
           </div>

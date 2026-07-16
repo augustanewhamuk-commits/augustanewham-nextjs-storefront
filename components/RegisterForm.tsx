@@ -84,6 +84,17 @@ export function RegisterForm() {
         />
       </div>
 
+      <label className="flex cursor-pointer items-start gap-3 font-body text-[13px] leading-relaxed text-brand-gray">
+        <input
+          type="checkbox"
+          name="acceptsMarketing"
+          className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-black"
+        />
+        <span>
+          Email me with news and offers — subscribers get 10% off every order.
+        </span>
+      </label>
+
       {state.error ? <p className={errorText}>{state.error}</p> : null}
 
       <button type="submit" disabled={isPending} className={primaryButton}>

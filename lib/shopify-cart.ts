@@ -17,6 +17,7 @@ import { cookies } from "next/headers";
 import { shopifyFetch } from "./shopify";
 import { getProduct as getShopifyProduct } from "./shopify";
 import { getCountryContext } from "./country";
+import { getBuyerEmail } from "./subscriber";
 
 const CART_COOKIE = "an_cart_id";
 const isProd = process.env.NODE_ENV === "production";
@@ -32,14 +33,22 @@ export type CartLine = {
   image: string | null;
   /** Selected variant options, e.g. [{name:"Color",value:"Black"}]. */
   options: { name: string; value: string }[];
+  /** What the line costs after Shopify's automatic discounts. */
   lineTotal: Money;
+  /** The undiscounted line cost — differs from lineTotal when discounted. */
+  lineOriginal: Money;
 };
 
 export type Cart = {
   id: string;
   checkoutUrl: string;
   totalQuantity: number;
+  /** Undiscounted goods total (sum of lineOriginal). */
   subtotal: Money;
+  /** Automatic discount applied by Shopify (e.g. the subscriber 10%), if any. */
+  discount: { title: string | null; amount: Money } | null;
+  /** Goods total after discounts, before shipping/taxes. */
+  total: Money;
   lines: CartLine[];
 };
 
@@ -48,14 +57,25 @@ const CART_FRAGMENT = /* GraphQL */ `
     id
     checkoutUrl
     totalQuantity
-    buyerIdentity { countryCode }
+    buyerIdentity { countryCode email }
     cost { subtotalAmount { amount currencyCode } }
+    discountAllocations {
+      discountedAmount { amount currencyCode }
+      ... on CartAutomaticDiscountAllocation { title }
+    }
     lines(first: 100) {
       edges {
         node {
           id
           quantity
-          cost { totalAmount { amount currencyCode } }
+          cost {
+            totalAmount { amount currencyCode }
+            subtotalAmount { amount currencyCode }
+          }
+          discountAllocations {
+            discountedAmount { amount currencyCode }
+            ... on CartAutomaticDiscountAllocation { title }
+          }
           merchandise {
             ... on ProductVariant {
               id
@@ -70,18 +90,22 @@ const CART_FRAGMENT = /* GraphQL */ `
   }
 `;
 
+type RawAllocation = { discountedAmount: Money; title?: string | null };
+
 type RawCart = {
   id: string;
   checkoutUrl: string;
   totalQuantity: number;
-  buyerIdentity: { countryCode: string | null } | null;
+  buyerIdentity: { countryCode: string | null; email: string | null } | null;
   cost: { subtotalAmount: Money };
+  discountAllocations: RawAllocation[];
   lines: {
     edges: {
       node: {
         id: string;
         quantity: number;
-        cost: { totalAmount: Money };
+        cost: { totalAmount: Money; subtotalAmount: Money };
+        discountAllocations: RawAllocation[];
         merchandise: {
           id: string;
           selectedOptions: { name: string; value: string }[];
@@ -94,25 +118,55 @@ type RawCart = {
 };
 
 function normalizeCart(raw: RawCart): Cart {
+  const currencyCode = raw.cost.subtotalAmount.currencyCode;
+
+  // Shopify clamps a line to quantity 0 (instead of rejecting it) when the
+  // variant is out of stock; such lines are dead weight — never show them.
+  const liveLines = raw.lines.edges.filter(({ node }) => node.quantity > 0);
+
+  // Undiscounted goods total + the total discount Shopify applied (cart-level
+  // allocations plus per-line ones, e.g. the subscriber "Customer Discount").
+  let subtotal = 0;
+  let discountAmount = 0;
+  let discountTitle: string | null = null;
+  for (const alloc of raw.discountAllocations) {
+    discountAmount += Number(alloc.discountedAmount.amount);
+    discountTitle ??= alloc.title ?? null;
+  }
+  for (const { node } of liveLines) {
+    subtotal += Number(node.cost.subtotalAmount.amount);
+    for (const alloc of node.discountAllocations) {
+      discountAmount += Number(alloc.discountedAmount.amount);
+      discountTitle ??= alloc.title ?? null;
+    }
+  }
+
   return {
     id: raw.id,
     checkoutUrl: raw.checkoutUrl,
     totalQuantity: raw.totalQuantity,
-    subtotal: raw.cost.subtotalAmount,
-    // Shopify clamps a line to quantity 0 (instead of rejecting it) when the
-    // variant is out of stock; such lines are dead weight — never show them.
-    lines: raw.lines.edges
-      .filter(({ node }) => node.quantity > 0)
-      .map(({ node }) => ({
-        id: node.id,
-        quantity: node.quantity,
-        merchandiseId: node.merchandise.id,
-        productTitle: node.merchandise.product.title,
-        productHandle: node.merchandise.product.handle,
-        image: node.merchandise.image?.url ?? null,
-        options: node.merchandise.selectedOptions,
-        lineTotal: node.cost.totalAmount,
-      })),
+    subtotal: { amount: subtotal.toFixed(2), currencyCode },
+    discount:
+      discountAmount > 0
+        ? {
+            title: discountTitle,
+            amount: { amount: discountAmount.toFixed(2), currencyCode },
+          }
+        : null,
+    // cost.subtotalAmount is Shopify's goods total *after* discounts and
+    // before shipping/taxes — exactly the number the summary should show.
+    total: raw.cost.subtotalAmount,
+    lines: liveLines.map(({ node }) => ({
+      id: node.id,
+      quantity: node.quantity,
+      merchandiseId: node.merchandise.id,
+      productTitle: node.merchandise.product.title,
+      productHandle: node.merchandise.product.handle,
+      image: node.merchandise.image?.url ?? null,
+      options: node.merchandise.selectedOptions,
+      lineTotal: node.cost.totalAmount,
+      lineOriginal: node.cost.subtotalAmount,
+    })),
   };
 }
 
@@ -195,12 +249,20 @@ export async function getCart(): Promise<Cart | null> {
     return null;
   }
 
-  // Self-heal the buyer's country so checkout prices track the currency the
-  // shopper is browsing in (they may have switched region after the cart was
-  // created, or the cart predates buyerIdentity support).
-  const country = await getCountryContext();
-  if (data.cart.buyerIdentity?.countryCode !== country) {
-    const updated = await updateBuyerIdentity(data.cart.id, country);
+  // Self-heal the buyer identity: the country so checkout prices track the
+  // currency the shopper is browsing in, and the buyer email so segment-based
+  // automatic discounts (the subscriber 10%) apply — the shopper may have
+  // switched region, logged in or subscribed after the cart was created.
+  const [country, buyerEmail] = await Promise.all([
+    getCountryContext(),
+    getBuyerEmail(),
+  ]);
+  const identity = data.cart.buyerIdentity;
+  const staleCountry = identity?.countryCode !== country;
+  const staleEmail =
+    !!buyerEmail && identity?.email?.toLowerCase() !== buyerEmail;
+  if (staleCountry || staleEmail) {
+    const updated = await updateBuyerIdentity(data.cart.id, country, buyerEmail);
     if (updated) return normalizeCart(updated);
   }
 
@@ -208,12 +270,14 @@ export async function getCart(): Promise<Cart | null> {
 }
 
 /**
- * Point an existing cart at a country so Shopify locks in that market's catalog
- * price (and currency) through to checkout. Returns null if the cart is gone.
+ * Point an existing cart at a country (locks in that market's catalog price and
+ * currency through to checkout) and, when known, the buyer's email (unlocks
+ * customer-segment automatic discounts). Returns null if the cart is gone.
  */
 async function updateBuyerIdentity(
   cartId: string,
   country: string,
+  email: string | null,
 ): Promise<RawCart | null> {
   const data = await shopifyFetch<{
     cartBuyerIdentityUpdate: { cart: RawCart | null };
@@ -230,7 +294,10 @@ async function updateBuyerIdentity(
         }
       }
     `,
-    { cartId, buyerIdentity: { countryCode: country } },
+    {
+      cartId,
+      buyerIdentity: { countryCode: country, ...(email ? { email } : {}) },
+    },
     0,
     false, // tokenless — match the tokenless catalogue context
   );
@@ -297,21 +364,31 @@ async function createCartWithLine(
   quantity: number,
 ): Promise<AddLineResult> {
   // Stamp the buyer's country at creation so market pricing is locked in from
-  // the first line through to checkout (see @inContext on the catalogue reads).
-  const country = await getCountryContext();
+  // the first line through to checkout (see @inContext on the catalogue reads),
+  // plus the buyer email (when known) so subscriber discounts apply immediately.
+  const [country, buyerEmail] = await Promise.all([
+    getCountryContext(),
+    getBuyerEmail(),
+  ]);
   const data = await shopifyFetch<{
     cartCreate: { cart: RawCart; userErrors: { message: string }[] };
   }>(
     /* GraphQL */ `
       ${CART_FRAGMENT}
-      mutation CreateCart($lines: [CartLineInput!]!, $country: CountryCode!) {
-        cartCreate(input: { lines: $lines, buyerIdentity: { countryCode: $country } }) {
+      mutation CreateCart($lines: [CartLineInput!]!, $buyerIdentity: CartBuyerIdentityInput!) {
+        cartCreate(input: { lines: $lines, buyerIdentity: $buyerIdentity }) {
           cart { ...CartFields }
           userErrors { message }
         }
       }
     `,
-    { lines: [{ merchandiseId, quantity }], country },
+    {
+      lines: [{ merchandiseId, quantity }],
+      buyerIdentity: {
+        countryCode: country,
+        ...(buyerEmail ? { email: buyerEmail } : {}),
+      },
+    },
     0,
     false, // tokenless — match the tokenless catalogue context
   );

@@ -68,37 +68,54 @@ function applyOverlay(base: Cart | null): Cart | null {
   });
   if (!changesAnything) return base;
 
-  let subtotal = Number(base.subtotal.amount);
+  // Scale each changed line by its unit price (discounted + original), then
+  // rebuild the aggregates from the lines so subtotal/discount/total stay
+  // consistent until Shopify's confirmed cart replaces this estimate.
+  let subtotal = 0;
+  let total = 0;
   let totalQuantity = 0;
+  const currencyCode = base.subtotal.currencyCode;
   const lines: CartLine[] = [];
   for (const line of base.lines) {
     const desired = pendingQuantities.get(line.id) ?? line.quantity;
     if (desired === line.quantity) {
       lines.push(line);
       totalQuantity += line.quantity;
+      subtotal += Number(line.lineOriginal.amount);
+      total += Number(line.lineTotal.amount);
       continue;
     }
-    const unitPrice = Number(line.lineTotal.amount) / (line.quantity || 1);
-    subtotal += unitPrice * (desired - line.quantity);
     if (desired > 0) {
+      const unitTotal = Number(line.lineTotal.amount) / (line.quantity || 1);
+      const unitOriginal =
+        Number(line.lineOriginal.amount) / (line.quantity || 1);
       lines.push({
         ...line,
         quantity: desired,
-        lineTotal: {
-          amount: (unitPrice * desired).toFixed(2),
-          currencyCode: line.lineTotal.currencyCode,
+        lineTotal: { amount: (unitTotal * desired).toFixed(2), currencyCode },
+        lineOriginal: {
+          amount: (unitOriginal * desired).toFixed(2),
+          currencyCode,
         },
       });
       totalQuantity += desired;
+      subtotal += unitOriginal * desired;
+      total += unitTotal * desired;
     }
   }
+  const discountAmount = Math.max(0, subtotal - total);
   return {
     ...base,
     totalQuantity,
-    subtotal: {
-      amount: Math.max(0, subtotal).toFixed(2),
-      currencyCode: base.subtotal.currencyCode,
-    },
+    subtotal: { amount: Math.max(0, subtotal).toFixed(2), currencyCode },
+    discount:
+      discountAmount > 0.005
+        ? {
+            title: base.discount?.title ?? null,
+            amount: { amount: discountAmount.toFixed(2), currencyCode },
+          }
+        : null,
+    total: { amount: Math.max(0, total).toFixed(2), currencyCode },
     lines,
   };
 }

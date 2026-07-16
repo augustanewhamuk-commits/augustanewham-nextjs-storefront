@@ -283,6 +283,14 @@ export function CartDrawer() {
                         }`}
                       >
                         {formatMoney(line.lineTotal)}
+                        {line.lineOriginal.amount !== line.lineTotal.amount ? (
+                          <>
+                            {" "}
+                            <s className="text-brand-gray">
+                              {formatMoney(line.lineOriginal)}
+                            </s>
+                          </>
+                        ) : null}
                       </span>
                     </div>
                   </div>
@@ -291,10 +299,20 @@ export function CartDrawer() {
             </ul>
 
             <div className="border-t border-brand-light-gray px-5 py-5 sm:px-6">
+              {cart?.discount ? (
+                <div className="mb-2 flex items-center justify-between font-body text-[13px]">
+                  <span className="text-brand-gray">
+                    {cart.discount.title ?? "Discount"}
+                  </span>
+                  <span className="text-brand-black tabular-nums">
+                    −{formatMoney(cart.discount.amount)}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between font-body text-[14px]">
                 <span className="text-brand-gray">Subtotal</span>
                 <span className="font-medium text-brand-black tabular-nums">
-                  {cart ? formatMoney(cart.subtotal) : null}
+                  {cart ? formatMoney(cart.total) : null}
                 </span>
               </div>
               <p className="mt-1 font-body text-[12px] text-brand-gray">

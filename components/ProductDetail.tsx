@@ -15,7 +15,8 @@ import type { Product } from "@/lib/products";
 import { variantImage } from "@/lib/products";
 import { addToCart, openCart } from "@/lib/cart";
 import { flyToCart } from "@/lib/flyToCart";
-import { formatPrice } from "@/lib/currency";
+import { Price } from "./Price";
+import { useSubscriberDiscount } from "./SubscriberContext";
 import { ProductShot } from "./ProductShot";
 
 /** Shipping & returns summary (kept in sync with /returns-refund-shipping). */
@@ -31,6 +32,29 @@ const INFO = [
     body: "Return within 30 days of your order for a refund. Items must be unworn, unwashed and have their tags attached. Email us with your order number and we'll reply within 2 business days with the return address. A return shipping fee is deducted from your refund.",
   },
 ];
+
+/** Price line — slashed subscriber price plus a note on how the discount lands. */
+function PriceBlock({
+  amount,
+  currencyCode,
+}: {
+  amount: number;
+  currencyCode: string;
+}) {
+  const discountPercent = useSubscriberDiscount();
+  return (
+    <div className="mt-5">
+      <p className="font-body text-xl text-brand-black tabular-nums">
+        <Price amount={amount} currencyCode={currencyCode} />
+      </p>
+      {discountPercent != null ? (
+        <p className="mt-1 font-body text-[12px] text-brand-gray">
+          Your {discountPercent}% subscriber discount is applied in the cart.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function ProductDetail({ product }: { product: Product }) {
   const [variantIndex, setVariantIndex] = useState(0);
@@ -137,9 +161,7 @@ export function ProductDetail({ product }: { product: Product }) {
         <p className="mt-3 font-body text-[15px] text-brand-gray">
           {product.tagline}
         </p>
-        <p className="mt-5 font-body text-xl text-brand-black tabular-nums">
-          {formatPrice(product.price, product.currencyCode)}
-        </p>
+        <PriceBlock amount={product.price} currencyCode={product.currencyCode} />
 
         {/* Colour */}
         <div className="mt-8">

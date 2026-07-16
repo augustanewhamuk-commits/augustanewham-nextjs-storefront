@@ -8,7 +8,7 @@ import type { Product } from "@/lib/products";
 import { variantImage } from "@/lib/products";
 import { addToCart, openCart } from "@/lib/cart";
 import { flyToCart } from "@/lib/flyToCart";
-import { formatPrice } from "@/lib/currency";
+import { Price } from "./Price";
 import { ProductShot } from "./ProductShot";
 
 /**
@@ -181,7 +181,7 @@ export function ProductCard({
             </Link>
           </h3>
           <span className="shrink-0 font-body text-[13px] text-brand-black tabular-nums">
-            {formatPrice(product.price, product.currencyCode)}
+            <Price amount={product.price} currencyCode={product.currencyCode} />
           </span>
         </div>
 
