@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { refreshCart } from "@/lib/cart";
-import { SUBSCRIBE_PROMPTED_KEY, subscribeWithTimeout } from "./SubscribeModal";
+import {
+  SUBSCRIBE_PROMPTED_KEY,
+  subscribeWithTimeout,
+  validateEmail,
+} from "./SubscribeModal";
 
 /**
  * Footer newsletter signup — creates the subscriber in Shopify (see
@@ -17,10 +21,21 @@ export function NewsletterForm() {
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Until hydration attaches our submit handler, a click/Enter would perform a
+  // native form submission — a full page reload that sends nothing. Keeping
+  // the (sole) submit button disabled in the server-rendered HTML blocks both
+  // clicks and implicit Enter submission during that window.
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (status === "loading") return;
+    const invalid = validateEmail(email);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
     setStatus("loading");
     setError(null);
     const result = await subscribeWithTimeout(email);
@@ -50,7 +65,7 @@ export function NewsletterForm() {
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} noValidate>
       <div className="mt-5 flex items-center border-b border-brand-black">
         <label htmlFor="newsletter-email" className="sr-only">
           Email address
@@ -59,7 +74,10 @@ export function NewsletterForm() {
           id="newsletter-email"
           type="email"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            if (error) setError(null);
+          }}
           placeholder="Email address"
           autoComplete="email"
           required
@@ -69,7 +87,7 @@ export function NewsletterForm() {
         <button
           type="submit"
           aria-label="Subscribe"
-          disabled={status === "loading"}
+          disabled={!ready || status === "loading"}
           className="inline-flex p-2 text-brand-black transition-colors hover:text-brand-gray disabled:opacity-60"
         >
           {status === "loading" ? (

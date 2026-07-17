@@ -40,8 +40,10 @@ export async function subscribeAction(email: string): Promise<SubscribeState> {
     // fires an account-activation email instead of subscribing) and sends no
     // account emails at all. Available once ADMIN_API_ACCESS_TOKEN is set.
     if (hasAdminApi()) {
-      const ok = await adminSubscribeEmail(trimmed);
-      if (!ok) return { error: "Something went wrong — please try again." };
+      const result = await adminSubscribeEmail(trimmed);
+      if (!result.ok) {
+        return { error: "Something went wrong — please try again." };
+      }
       await setBuyerEmail(trimmed);
       await markSubscribed();
       return SUCCESS;

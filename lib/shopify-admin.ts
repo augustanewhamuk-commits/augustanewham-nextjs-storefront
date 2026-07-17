@@ -100,10 +100,16 @@ async function adminFetch<T>(
   return json.data;
 }
 
-const CONSENT_INPUT = {
+/**
+ * Fresh consent payload. `consentUpdatedAt` must be the moment of THIS
+ * signup: Shopify treats a missing/stale timestamp as "consent unchanged",
+ * which can stop marketing automations (e.g. the welcome email) from firing.
+ */
+const consentInput = () => ({
   marketingState: "SUBSCRIBED",
   marketingOptInLevel: "SINGLE_OPT_IN",
-};
+  consentUpdatedAt: new Date().toISOString(),
+});
 
 /**
  * Subscribe an email to marketing via the Admin API. Unlike the Storefront
@@ -115,44 +121,27 @@ const CONSENT_INPUT = {
  *     no welcome or activation email at all.
  * Returns true when the email ends up subscribed.
  */
-export async function adminSubscribeEmail(email: string): Promise<boolean> {
-  // Existing customer? Update their consent in place.
-  const found = await adminFetch<{
-    customers: { edges: { node: { id: string } }[] };
-  }>(
-    /* GraphQL */ `
-      query FindCustomer($query: String!) {
-        customers(first: 1, query: $query) {
-          edges { node { id } }
-        }
-      }
-    `,
-    { query: `email:'${email.replace(/['\\]/g, "")}'` },
-  );
-  const existing = found.customers.edges[0]?.node;
+export type AdminSubscribeResult = {
+  ok: boolean;
+  /**
+   * True only on a genuine transition to subscribed (new subscriber, or an
+   * existing customer who wasn't subscribed). Repeat submissions of an
+   * already-subscribed email come back false — the caller uses this to send
+   * the welcome email exactly once.
+   */
+  newlySubscribed: boolean;
+};
 
+export async function adminSubscribeEmail(
+  email: string,
+): Promise<AdminSubscribeResult> {
+  const existing = await findCustomer(email);
   if (existing) {
-    const data = await adminFetch<{
-      customerEmailMarketingConsentUpdate: {
-        userErrors: { message: string }[];
-      };
-    }>(
-      /* GraphQL */ `
-        mutation SubscribeExisting($input: CustomerEmailMarketingConsentUpdateInput!) {
-          customerEmailMarketingConsentUpdate(input: $input) {
-            customer { id }
-            userErrors { message }
-          }
-        }
-      `,
-      {
-        input: {
-          customerId: existing.id,
-          emailMarketingConsent: CONSENT_INPUT,
-        },
-      },
-    );
-    return data.customerEmailMarketingConsentUpdate.userErrors.length === 0;
+    if (existing.marketingState === "SUBSCRIBED") {
+      return { ok: true, newlySubscribed: false };
+    }
+    const ok = await updateConsent(existing.id);
+    return { ok, newlySubscribed: ok };
   }
 
   const created = await adminFetch<{
@@ -166,7 +155,77 @@ export async function adminSubscribeEmail(email: string): Promise<boolean> {
         }
       }
     `,
-    { input: { email, emailMarketingConsent: CONSENT_INPUT } },
+    { input: { email, emailMarketingConsent: consentInput() } },
   );
-  return created.customerCreate.userErrors.length === 0;
+  const errors = created.customerCreate.userErrors;
+  if (errors.length === 0) return { ok: true, newlySubscribed: true };
+
+  // "Email has already been taken" despite the search miss: the customer
+  // search index lags a few seconds behind writes (verified), so a very
+  // recent record (double-submit, fresh registration) is findable only after
+  // a short wait. Retry the lookup once, then update consent in place.
+  if (errors.some((e) => /taken/i.test(e.message))) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const retried = await findCustomer(email);
+    if (retried) {
+      if (retried.marketingState === "SUBSCRIBED") {
+        return { ok: true, newlySubscribed: false };
+      }
+      const ok = await updateConsent(retried.id);
+      return { ok, newlySubscribed: ok };
+    }
+  }
+  return { ok: false, newlySubscribed: false };
+}
+
+async function findCustomer(
+  email: string,
+): Promise<{ id: string; marketingState: string | null } | null> {
+  const found = await adminFetch<{
+    customers: {
+      edges: {
+        node: {
+          id: string;
+          emailMarketingConsent: { marketingState: string } | null;
+        };
+      }[];
+    };
+  }>(
+    /* GraphQL */ `
+      query FindCustomer($query: String!) {
+        customers(first: 1, query: $query) {
+          edges {
+            node {
+              id
+              emailMarketingConsent { marketingState }
+            }
+          }
+        }
+      }
+    `,
+    { query: `email:'${email.replace(/['\\]/g, "")}'` },
+  );
+  const node = found.customers.edges[0]?.node;
+  return node
+    ? { id: node.id, marketingState: node.emailMarketingConsent?.marketingState ?? null }
+    : null;
+}
+
+async function updateConsent(customerId: string): Promise<boolean> {
+  const data = await adminFetch<{
+    customerEmailMarketingConsentUpdate: {
+      userErrors: { message: string }[];
+    };
+  }>(
+    /* GraphQL */ `
+      mutation SubscribeExisting($input: CustomerEmailMarketingConsentUpdateInput!) {
+        customerEmailMarketingConsentUpdate(input: $input) {
+          customer { id }
+          userErrors { message }
+        }
+      }
+    `,
+    { input: { customerId, emailMarketingConsent: consentInput() } },
+  );
+  return data.customerEmailMarketingConsentUpdate.userErrors.length === 0;
 }

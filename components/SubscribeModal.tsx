@@ -15,6 +15,16 @@ const NETWORK_ERROR: SubscribeState = {
   error: "We couldn't reach the store — please try again in a moment.",
 };
 
+/** Mirrors the server action's validation so errors show instantly, styled. */
+export function validateEmail(email: string): string | null {
+  const trimmed = email.trim();
+  if (!trimmed) return "Enter your email address.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return "Enter a valid email address.";
+  }
+  return null;
+}
+
 /**
  * Run the subscribe action with a hard client-side deadline. The server call
  * has its own 10s Shopify timeout, but if the *action response* itself stalls
@@ -92,6 +102,12 @@ export function SubscribeModal({ enabled }: { enabled: boolean }) {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (status === "loading") return;
+    const invalid = validateEmail(email);
+    if (invalid) {
+      setError(invalid);
+      inputRef.current?.focus();
+      return;
+    }
     setStatus("loading");
     setError(null);
     const result = await subscribeWithTimeout(email);
@@ -145,7 +161,7 @@ export function SubscribeModal({ enabled }: { enabled: boolean }) {
             {message}
           </p>
         ) : (
-          <form onSubmit={submit} className="mt-6">
+          <form onSubmit={submit} noValidate className="mt-6">
             <label htmlFor="subscribe-modal-email" className="sr-only">
               Email address
             </label>
@@ -154,7 +170,10 @@ export function SubscribeModal({ enabled }: { enabled: boolean }) {
               id="subscribe-modal-email"
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (error) setError(null);
+              }}
               placeholder="Email address"
               autoComplete="email"
               required
