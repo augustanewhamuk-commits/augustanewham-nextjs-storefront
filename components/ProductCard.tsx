@@ -175,13 +175,17 @@ export function ProductCard({
           {product.category}
         </p>
         <div className="mt-1 flex items-baseline justify-between gap-3">
-          <h3 className="font-wordmark text-[13px] uppercase tracking-[0.06em] text-brand-black">
+          <h3 className="min-w-0 font-wordmark text-[13px] uppercase tracking-[0.06em] text-brand-black">
             <Link href={`/product/${product.slug}`} className="hover:underline">
               {product.name}
             </Link>
           </h3>
           <span className="shrink-0 font-body text-[13px] text-brand-black tabular-nums">
-            <Price amount={product.price} currencyCode={product.currencyCode} />
+            <Price
+              amount={product.price}
+              currencyCode={product.currencyCode}
+              stacked
+            />
           </span>
         </div>
 
