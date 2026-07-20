@@ -115,8 +115,8 @@ export function CartView() {
 
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="font-wordmark text-[15px] uppercase tracking-[0.06em] text-brand-black">
+                <div className="min-w-0 flex-1">
+                  <h2 className="break-words font-wordmark text-[15px] uppercase tracking-[0.06em] text-brand-black">
                     <Link
                       href={`/product/${line.productHandle}`}
                       className="hover:underline"
