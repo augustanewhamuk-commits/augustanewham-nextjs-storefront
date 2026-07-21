@@ -114,35 +114,30 @@ export function CartView() {
             </Link>
 
             <div className="flex min-w-0 flex-1 flex-col">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h2 className="break-words font-wordmark text-[15px] uppercase tracking-[0.06em] text-brand-black">
-                    <Link
-                      href={`/product/${line.productHandle}`}
-                      className="hover:underline"
-                    >
-                      {line.productTitle}
-                    </Link>
-                  </h2>
-                  <p className="mt-1 font-body text-[13px] text-brand-gray">
-                    {lineSubtitle(line)}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 font-body text-[15px] text-brand-black tabular-nums transition-opacity ${
+              <div className="min-w-0">
+                <h2 className="break-words font-wordmark text-[15px] uppercase tracking-[0.06em] text-brand-black">
+                  <Link
+                    href={`/product/${line.productHandle}`}
+                    className="hover:underline"
+                  >
+                    {line.productTitle}
+                  </Link>
+                </h2>
+                <p className="mt-1 font-body text-[13px] text-brand-gray">
+                  {lineSubtitle(line)}
+                </p>
+                <p
+                  className={`mt-1.5 flex items-baseline gap-2 font-body text-[15px] text-brand-black tabular-nums transition-opacity ${
                     pendingLines.has(line.id) ? "opacity-40" : "opacity-100"
                   }`}
                 >
                   {formatMoney(line.lineTotal)}
                   {line.lineOriginal.amount !== line.lineTotal.amount ? (
-                    <>
-                      {" "}
-                      <s className="text-brand-gray">
-                        {formatMoney(line.lineOriginal)}
-                      </s>
-                    </>
+                    <s className="text-[13px] text-brand-gray">
+                      {formatMoney(line.lineOriginal)}
+                    </s>
                   ) : null}
-                </span>
+                </p>
               </div>
 
               <div className="mt-auto flex items-center justify-between pt-4">
